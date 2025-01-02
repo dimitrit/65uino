@@ -1,6 +1,6 @@
 *.o
 *.bin
-build/listing.txt
+*.lst
 .DS_Store
 hardware/_autosave*
 hardware/#auto_saved_files#
