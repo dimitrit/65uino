@@ -1,3 +1,5 @@
+.import i2c_start, i2c_stop, i2cbyteout
+
 ;Flappy Larus constants and variables
 GRAVITY = 160
 debounce_flag = mode
@@ -16,14 +18,14 @@ jsr ssd1306_clear
 lda #6
 sta gamespeed
 sta loopcounter2
-lda #0 
+lda #0
 sta score
 sta loopcounter
 lda #8
 sta obstaclecnt
 
 restart:
-lda #0 
+lda #0
 sta scroll
 
 lda #0
@@ -115,7 +117,7 @@ sec ; Return C = 1
 rts
 gameover2:
 clc ; Return C = 0 to indicate gameover
-rts 
+rts
 
 checkcollision2:
 lda #$80
@@ -142,7 +144,7 @@ sec ; Return C = 1
 rts
 gameover3:
 clc ; Return C = 0 to indicate gameover
-rts 
+rts
 
 clearcursor:
 ;Clear current cursor position
@@ -165,7 +167,7 @@ jsr clearcursor
 
 ; Draw Larus
 lda cursor
-sec 
+sec
 sbc #2
 sta cursor
 jsr setcursor2
@@ -305,7 +307,7 @@ sta cursor
 jsr setcursor2
 lda score
 jsr printbyte
-pla 
+pla
 sta cursor
 jsr setcursor2
 rts
@@ -321,7 +323,7 @@ lda #' '
 jsr fastprint
 lda #' '
 jsr fastprint
-pla 
+pla
 sta cursor
 jsr setcursor2
 rts

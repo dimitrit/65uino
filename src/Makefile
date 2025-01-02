@@ -1,17 +1,19 @@
-target = abn6507rom.bin
+AS = ca65
+LD = ld65
 
-default: all
+rom = abn6507rom.bin
+rom_objects = zerop.o i2c.o ssd1306.o serial.o abn6507rom.o
 
-all: $(target)
+default: $(rom)
 
-%.bin: %.o
-	ld65 -o $@ $< -C memmap.cfg
+$(rom): $(rom_objects)
+	$(LD) -o $@ $(rom_objects) -C memmap.cfg -Ln $(basename $@).map
 
 %.o: %.s
-	ca65 -vvv --cpu 6502 -l $(basename $<).lst -o $@ $<
+	$(AS) -vvv --cpu 6502 -l $(basename $<).lst -o $@ $<
 
 clean:
-	@rm -f *.lst *.o *.bin
+	@rm -f *.lst *.map *.o *.bin
 
 .PHONY: clean
 

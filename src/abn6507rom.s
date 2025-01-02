@@ -5,65 +5,14 @@
 .feature org_per_seg
 .feature c_comments
 
-BAUDRATE=9600 ; Max 9600
-BAUDSTEP=9600 / BAUDRATE - 1; Must be an integer
-
-RIOT = $80
-DRA     = RIOT + $00 ;DRA ('A' side data register)
-DDRA    = RIOT + $01 ;DDRA ('A' side data direction register)
-DRB     = RIOT + $02 ;DRB ('B' side data register)
-DDRB    = RIOT + $03 ;('B' side data direction register)
-READTDI = RIOT + $04 ;Read timer (disable interrupt)
-
-WEDGC   = RIOT + $04 ;Write edge-detect control (negative edge-detect,disable interrupt)
-RRIFR   = RIOT + $05 ;Read interrupt flag register (bit 7 = timer, bit 6 PA7 edge-detect) Clear PA7 flag
-A7PEDI  = RIOT + $05 ;Write edge-detect control (positive edge-detect,disable interrupt)
-A7NEEI  = RIOT + $06 ;Write edge-detect control (negative edge-detect, enable interrupt)
-A7PEEI  = RIOT + $07 ;Write edge-detect control (positive edge-detect enable interrupt)
-
-READTEI = RIOT + $0C ;Read timer (enable interrupt)
-WTD1DI  = RIOT + $14 ; Write timer (divide by 1, disable interrupt)
-WTD8DI  = RIOT + $15 ;Write timer (divide by 8, disable interrupt)
-WTD64DI = RIOT + $16 ;Write timer (divide by 64, disable interrupt)
-WTD1KDI = RIOT + $17 ;Write timer (divide by 1024, disable interrupt)
-
-WTD1EI  = RIOT + $1C ;Write timer (divide by 1, enable interrupt)
-WTD8EI  = RIOT + $1D ;Write timer (divide by 8, enable interrupt)
-WTD64EI = RIOT + $1E ;Write timer (divide by 64, enable interrupt)
-WTD1KEI = RIOT + $1F ;Write timer (divide by 1024, enable interrupt)
-
-; Bitmasks for setting and clearing signals in Data Register B (DRB) (as hex)
-BITMASK_RLSBLE   = $04
-BITMASK_RMSBLE     = $08
-BITMASK_ROM_OE    = $10
-BITMASK_CTRL_LE   = $20
-BITMASK_ROM_CE    = $80
-
-; Bitmasks for additional signals (as binary)
-BITMASK_VPE_TO_VPP    = %00000001
-BITMASK_A9_VPP_ENABLE = %00000010
-BITMASK_VPE_ENABLE    = %00000100
-BITMASK_P1_VPP_ENABLE = %00001000
-BITMASK_REG_DISABLE   = %10000000
-
+.include "riot.s"
 .include "macros.s"
 ;includes the "print" macro for printing strings
 
-.segment "ZEROPAGE"
-I2CADDR:  .res 1 ; Reserve 1 byte for I2CADDR
-inb:      .res 1 ; Reserve 1 byte for inb - Used for Serial and I2C
-outb:     .res 1 ; Reserve 1 byte for outb - Used for Serial and I2C
-xtmp:     .res 1 ; Reserve 1 byte for xtmp
-stringp:  .res 2 ; Reserve 2 bytes for stringp (stringp + 1)
-;Stringp +1 free for temp.
-mode:     .res 1 ; Reserve 1 byte for mode
-rxcnt:    .res 1 ; Reserve 1 byte for rxcnt
-txcnt:    .res 1 ; Reserve 1 byte for txcnt
-runpnt:   .res 2 ; Reserve 2 bytes for runpnt
-cursor:   .res 1 ; Reserve 1 byte for cursor ; SSD1306
-scroll:   .res 1 ; Reserve 1 byte for scroll ; SSD1306
-tflags:   .res 1 ; Reserve 1 byte for tflags ; SSD1306
-serialbuf: .res 0 ; Reserve 1 byte for serialbuf - Used for text display and userland program storage
+.importzp inb, outb, xtmp, tflags, serialbuf, mode, i2caddr, txcnt, rxcnt, runpnt, cursor, stringp
+.import ssd1306_init, ssd1306_clear, ssd1306_sendchar, ssd1306_setcolumn, ssd1306_setline, printbyte
+.import ssd1306_wstring, ssd1306_prints
+.import serial_tx, serial_rx, delay_long, delay_short, qsdelay
 
 timer2  = stringp ; We're not going to be printing strings while waiting for timer2
 
@@ -76,21 +25,20 @@ longdelay = txcnt
 VPP_PIN_MSK   = 1 ; 0 == OE/VPP, 1 == Pin 1
 VPP_DROP_MSK  = 2 ; 0 == Dont drop, 1 == Drop the regulator voltage for programming and ID
 ID_A9_VPP_MSK = 4 ; 0 == VPP = VPP during ID,  1 == VPP = VCC during ID
-IDROM         = 8 ; 0 == Doesn't support ID, 1 == Supports ID 
+IDROM         = 8 ; 0 == Doesn't support ID, 1 == Supports ID
 RES2          = 16
-RES3          = 32 
-RES4          = 64 ; 
+RES3          = 32
+RES4          = 64 ;
 RES5          = 128
 
 .SEGMENT "USERLAND"
 .org $0e ; Just to make listing.txt match
 userland:
-jsr flappylarus
+;jsr flappylarus
 
-;jsr identifyrom
+jsr identifyrom
 
 ;jsr checkblank
-
 
 
 /*
@@ -127,11 +75,11 @@ twiddle:
 
 ;This snippet will clone what's on the internal ROM to a w27c512 in less than two seconds
 ;jsr clonetow27c512 ; Clone and verify (print to SSD1306)
-;jmp halt 
+;jmp halt
 
 ;This snippit checks if ROM is identical to ROM in programmer
 /*
-lda #%01000000 ; Indicator 
+lda #%01000000 ; Indicator
 jsr latchctrl
 print verifying
 jsr clonecheck ; Verify
@@ -168,13 +116,13 @@ sta longdelay ; Must be initialized to either 0 for 100us ROMs or number of ms f
 LDA #BITMASK_REG_DISABLE | BITMASK_P1_VPP_ENABLE
 JSR latchctrl  ; Latch the updated control signals
 
-;Let's make absolutely sure the regulator is stable 
-lda #$ff 
+;Let's make absolutely sure the regulator is stable
+lda #$ff
 sta DDRA
 jsr delay_long ; ~256ms
-lda #$ff 
+lda #$ff
 jsr delay_long ; ~256ms
-lda #$ff 
+lda #$ff
 jsr delay_long ; ~256ms
 
 ;jsr clonerom2 ; Write 65uino ROM
@@ -190,7 +138,7 @@ jmp main ; Get ready for new code
 fifobuffer:
 .res 4
 
-.segment "RODATA"
+.segment "CODE"
 .org $1000  ; Start address for code (for clarity, not strictly needed)
 
 nmi:
@@ -198,18 +146,18 @@ irq:
 reset:
     cld        ; Clear decimal mode flag
     sei        ; Disable interrupts (may not be necessary with 6507)
-    
+
     ; Set stack pointer and clear zero page RAM
     ldx #$7f   ; Load X register with 127 (stack starts from top of memory)
     txs        ; Transfer X to stack pointer
     lda #0     ; Clear accumulator
-    
-clearzp: 
+
+clearzp:
     sta $00,x  ; Clear zero page RAM from $007F to $0000
     dex        ; Decrement counter
     bne clearzp  ; Continue clearing until every bit of RAM is clear
 
-    JSR latchctrl  ; Call latchctrl subroutine to latch 0 into control register 
+    JSR latchctrl  ; Call latchctrl subroutine to latch 0 into control register
 
     lda #%01010000  ; Initialize DRB with bit 4 and 6 set to 1, rest to 0
     sta DRB
@@ -224,7 +172,7 @@ clearzp:
     jsr qsdelay   ; Delay for a short time
 
     lda #$3C      ; Address of the device (78 on the back of the module is 3C << 1)
-    sta I2CADDR
+    sta i2caddr
     jsr ssd1306_init  ; Initialize SSD1306 display
     jsr qsdelay   ; Delay for a short time
     jsr ssd1306_clear  ; Clear display
@@ -325,7 +273,7 @@ lda mode
 beq txt
 cmp #1
 beq bootload
-cmp #2 
+cmp #2
 beq programmer
 bootload:
 ;Time to parse data instead of txt - aka, our bootloader!
@@ -403,9 +351,9 @@ jsr serial_tx
 gowait:
 jmp wait
 
-.include "flappylarus.s" ; Flappy Larus game routines
-.include "i2c.s" ; i2c rutines specifically for the 65uino. Provides i2c_start, i2cbyteout, i2cbytein, i2c_stop - expects a few 
-.include "ssd1306.s" ; SSD1306 routines specifically for the 65uino. Provides ssd1306_init, ssd1306_clear, ssd1306_sendchar, ssd1306_setline, ssd1306_cmd, ssd1306_wstring, printbyte
+;.include "flappylarus.s" ; Flappy Larus game routines
+;.include "i2c.s" ; i2c rutines specifically for the 65uino. Provides i2c_start, i2cbyteout, i2cbytein, i2c_stop - expects a few
+;.include "ssd1306.s" ; SSD1306 routines specifically for the 65uino. Provides ssd1306_init, ssd1306_clear, ssd1306_sendchar, ssd1306_setline, ssd1306_cmd, ssd1306_wstring, printbyte
 
 ready:.asciiz "Ready to load code... "
 loading:.asciiz "Loading... "
@@ -419,7 +367,7 @@ welcome:
 
 erasing:.asciiz "\nErasing...\n"
 m27c512rom:.asciiz "M27C512"
-w27c512rom:.asciiz "W27C512" 
+w27c512rom:.asciiz "W27C512"
 foundwithid:.asciiz " found with ID: "
 unrecognized:.asciiz "Unrecognized ROM"
 blankcheckstr:.asciiz "Performing blank check... "
@@ -438,9 +386,9 @@ cmp #1
 beq sendromtoserial
 cmp #2
 beq burnromfromserial
-cmp #3 
+cmp #3
 beq eraserom
-;cmp #4 
+;cmp #4
 jmp calibrateVEP
 
 stoppage = userland ; Steal a byte of RAM
@@ -458,7 +406,7 @@ lda userland+3  ; Addr LSB
 sta romaddr
 lda userland+4  ; MSB
 sta romaddr+1
-lda userland+5  ; Stoppage - stop reading ROM when this rolls over. 
+lda userland+5  ; Stoppage - stop reading ROM when this rolls over.
 sta stoppage
 
 fetchromandsendserial:
@@ -479,7 +427,7 @@ bne fetchromandsendserial
 jmp finish
 
 eraserom:
-vendorid = userland+2 
+vendorid = userland+2
 serialid = userland+3
 jsr ssd1306_clear
 jsr idanderaserom
@@ -505,7 +453,7 @@ jsr delay_long ; Should probably check with a scope how long it actually takes t
 lda #0
 sta romaddr
 sta romaddr+1
-lda #2 
+lda #2
 sta DRA
 sta DDRA
 ldy #$7f
@@ -526,7 +474,7 @@ notlast:
 ldy #$7f
 cmp stoppage
 bne fetchandburnrom
-lda #0 
+lda #0
 jsr latchctrl
 jsr delay_long
 jsr serial_rbuf ; Let's tell sender we've finished with this
@@ -562,8 +510,8 @@ jmp main
 
 serial_rbuf:
     lda #$02            ; Set bit 1 for serial TX (Output), clear bit 0 for serial RX (Input)
-    sta DDRA            
-    sta DRA ; Make sure 
+    sta DDRA
+    sta DRA ; Make sure
     tya
     jsr delay_short     ; Delay long enough for a serial stop condition (high)
     lda #$AA            ; Better pattern than XON
@@ -572,7 +520,7 @@ serial_rbuf:
     sta WTD1KDI ; 244 * 1024 = 249856 ~= quarter second
 rxbufloop:
     lda READTDI         ; Timeout - hope we don't need to hang around longer
-    beq rxbufdone   
+    beq rxbufdone
     lda DRA             ; Read port register
     and #$01            ; Mask A to extract bit 0 (serial RX)
     bne rxbufloop       ; If bit is not clear, continue waiting - needs to be fixed with a timeout
@@ -588,7 +536,7 @@ rxloop:
     bne rxloop          ; If not, continue reading
     rts
 rxbufdone:
-    lda #$1f 
+    lda #$1f
     sta romaddr+1       ; Indicate we're done even if timeout
     rts                 ; Return from subroutine
 
@@ -613,7 +561,7 @@ fillbufloop:
     inc romaddr         ; Increment ROM address
     bne samepage        ; Branch if low byte did not overflow
     inc romaddr+1       ; Increment high byte if low byte overflowed
-    lda romaddr+1       ; Load high byte of ROM address again    
+    lda romaddr+1       ; Load high byte of ROM address again
     jsr latchmsb        ; Call subroutine to set up ROM chip with MSB again
 samepage:
     iny                 ; Increment index Y
@@ -628,7 +576,7 @@ samepage:
 ; Parameters: Assumes romaddr contains first ROM address
 ; Returns: None
 ;-----------------------------------------------------
-rom_writebuf:          
+rom_writebuf:
     lda romaddr+1       ; Load high byte of ROM address into A
     jsr latchmsb        ; Call subroutine to set up ROM chip with MSB
     lda romaddr         ; Load low byte of ROM address into A
@@ -638,7 +586,7 @@ writebufloop:
     LDA #BITMASK_REG_DISABLE | BITMASK_VPE_TO_VPP | BITMASK_VPE_ENABLE ; This should be fixed to match the programming profile
     sta DRA
     JSR latchctrl2  ; Latch the updated control signals
-    lda (fifobufferpnt),y    ; Store byte in fifobuffer at index Y    
+    lda (fifobufferpnt),y    ; Store byte in fifobuffer at index Y
     ; Write ROM
     sta DRA
     jsr writerom2
@@ -670,10 +618,10 @@ serial_wbuf:
     lda #$02            ; Set bit 1 for serial TX (Output)
     sta DDRA            ; Store to configure port direction
     sta DRA
-    tya 
+    tya
     jsr delay_short     ; Might need this to let the line go inactive long enough for receiver to sync start of byte
     lda #$AA            ; Start of frame
-    jsr serial_tx    
+    jsr serial_tx
     ldy #0              ; Clear Y register
 txbufloop:
     lda (fifobufferpnt),y  ; Load byte from buffer at index Y
@@ -818,7 +766,7 @@ jsr delay_long ; Stabilize VPP
 ldy #0
 sty DRA
 lda DRB
-ora #BITMASK_RLSBLE | BITMASK_RMSBLE 
+ora #BITMASK_RLSBLE | BITMASK_RMSBLE
 sta DRB
 and #~BITMASK_RMSBLE & ~BITMASK_RLSBLE & ~BITMASK_ROM_CE & $FF ; &$FF to make inversions 8 bits
 sta DRB
@@ -913,7 +861,7 @@ beq checknextaddress ; Bytes match, continue testing
 clonecheckdone:
 sty romaddr
 stx romaddr+1
-ldx DRA ; Return byte found in X 
+ldx DRA ; Return byte found in X
 lda DRB
 ora #BITMASK_ROM_OE | BITMASK_ROM_CE
 sta DRB
@@ -923,7 +871,7 @@ rts
 checkblank:
 print verifying
 jsr blankcheck ; Verify erasure
-cpx #$ff ; Check byte value 
+cpx #$ff ; Check byte value
 bne notblank
 print romblankstr
 
@@ -993,7 +941,7 @@ beq nextaddress
 checkdone:
 stx romaddr
 sty romaddr+1
-ldx DRA ; Return byte found in X 
+ldx DRA ; Return byte found in X
 lda DRB
 ora #BITMASK_ROM_OE | BITMASK_ROM_CE
 sta DRB
@@ -1004,17 +952,17 @@ LDA #BITMASK_REG_DISABLE
 JSR latchctrl  ; Latch the updated control signals
 LDA #BITMASK_REG_DISABLE | BITMASK_VPE_ENABLE | BITMASK_VPE_TO_VPP
 JSR latchctrl  ; Latch the updated control signals
-lda #$ff 
+lda #$ff
 sta DDRA
 jsr delay_short ; ~2ms
 
 clonerom2:
 lda #0 ; Address latches to 0
-sta romaddr ; Zero LSB 
+sta romaddr ; Zero LSB
 sta DRA
 tay
 LDA DRB
-ORA #BITMASK_RMSBLE 
+ORA #BITMASK_RMSBLE
 STA DRB
 AND #$ff & ~BITMASK_RMSBLE
 STA DRB
@@ -1023,11 +971,11 @@ lda #$10
 
 nextpage:
 sta romaddr+1
-sec 
+sec
 sbc #$10 ; ROM is mapped offset $1000
 sta DRA
 LDA DRB
-ORA #BITMASK_RMSBLE 
+ORA #BITMASK_RMSBLE
 STA DRB
 AND #$ff & ~BITMASK_RMSBLE
 STA DRB
@@ -1069,10 +1017,10 @@ rts
 
 writerom: ; Expects byte to burn in A, ROM address in $XY
 ; Returns: Nothing, but leaves voltages ON!(!)
-pha 
+pha
 LDA #BITMASK_REG_DISABLE
 JSR latchctrl  ; Latch the updated control signals
-LDA #BITMASK_REG_DISABLE | BITMASK_VPE_ENABLE | BITMASK_VPE_TO_VPP ; Probably want to make this part separate or dynamic. 
+LDA #BITMASK_REG_DISABLE | BITMASK_VPE_ENABLE | BITMASK_VPE_TO_VPP ; Probably want to make this part separate or dynamic.
 JSR latchctrl  ; Latch the updated control signals
 lda #$ff
 sta DDRA
@@ -1097,7 +1045,7 @@ lda DRB
 AND #~BITMASK_ROM_CE&$FF
 sta DRB
 
-lda #11 ; Hardcoded to W27C512. Must fix. 
+lda #11 ; Hardcoded to W27C512. Must fix.
 jsr delay_short
 
 lda DRB
@@ -1111,9 +1059,9 @@ erasew27c512: ; Assumes DDRA is $FF (output)
 lda #0
 sta DRA
 lda DRB ; Make sure CE & OE not already LOW and clear address latches
-ora #BITMASK_ROM_CE|BITMASK_ROM_OE | BITMASK_RLSBLE | BITMASK_RMSBLE 
+ora #BITMASK_ROM_CE|BITMASK_ROM_OE | BITMASK_RLSBLE | BITMASK_RMSBLE
 sta DRB
-and #~BITMASK_RLSBLE & ~BITMASK_RMSBLE & $ff; Latch 0 
+and #~BITMASK_RLSBLE & ~BITMASK_RMSBLE & $ff; Latch 0
 sta DRB
 ; Set CTRL_REGISTER to enable the regulator and set VPE/14V on A9
 LDA #BITMASK_REG_DISABLE
@@ -1186,7 +1134,7 @@ lda #$FF
 sta DDRA
 ; Set RMSBLE (bit 3) to latch the higher byte
 LDA DRB
-ORA #BITMASK_RMSBLE 
+ORA #BITMASK_RMSBLE
 STA DRB
 
 ; Clear RMSBLE (bit 3) to release the latch
@@ -1201,7 +1149,7 @@ readrom:
   lda romaddr+1
   sta DRA
   jsr latchmsb2
-readrom2:  
+readrom2:
   LDA romaddr        ; Load the low byte of the address
   sta DRA
   jsr latchlsb2
@@ -1221,145 +1169,6 @@ readrom2:
   LDA DRB
   ORA #BITMASK_ROM_CE | BITMASK_ROM_OE
   STA DRB
-rts
-
-wait_getserial:
-  lda #$02            ; Set bit 1 for serial TX (Output), clear bit 0 for serial RX (Input)
-  sta DDRA            ; Store to configure port direction
-wait_getserial2:
-  lda DRA ; Check serial 3c
-  and #$01 ; 2c
-  bne wait_getserial2 ; 2c
-  jsr serial_rx ; Get character
-rts
-
-qsdelay:
-lda #244
-sta WTD1KDI ; 244 * 1024 = 249856 ~= quarter second
-waitqs:
-lda READTDI
-bne waitqs ; Loop until timer runs out
-rts
-
-; jsr = 6 cycles
-; sta (zp) = 3 cycles
-; (WTD8DI -1) * 8 cycles
-; We can ignore branches while timer not 0
-;lda (zp) = 3 cycles
-; bne = 2 cycles (not taken since timer expired)
-; rts = 6 cycles
-; = 20 + ((WTD8DI - 1) * 8) cycles
-
-delay_short:
-sta WTD8DI ; Divide by 8 = A contains ticks to delay/8
-shortwait:
-nop; Sample every 8 cycles instead of every 6
-lda READTDI
-bne shortwait
-rts
-
-delay_long:
-sta WTD1KDI
-wait1k:
-lda READTDI
-bne wait1k ; Loop until timer runs out
-rts
-
-;Returns byte in A - assumes 9600 baud = ~104us/bit, 1 cycle = 1us (1 MHz)
-;We should call this ASAP when RX pin goes low - let's assume it just happened (13 cycles ago)
-serial_rx:
-;Minimum 13 cycles before we get here
-lda #(15+19*BAUDSTEP) ; 1.5 period-ish ; 2 cycles - 15 for 9600 baud, 34 for 4800
-jsr delay_short ; 140c
-ldx #8 ; 2 cycles
-;149 cycles to get here
-serial_rx_loop: ;103 cycles
-lda DRA ; Read RX bit 0 ; 3 cycles
-lsr ; Shift received bit into carry - in many cases might be safe to just lsr DRA ; 2 cycles
-ror inb ; Rotate into MSB 5 cycles
-lda #(9+13*BAUDSTEP) ; 2 cycles ;9 for 9600 baud, 22 for 4800 baud (add 104us == 104 / 8 = 13)
-jsr delay_short ; Delay until middle of next bit - overhead; 84 cycles
-nop ; 2c
-dex ; 2c
-bne serial_rx_loop ; 3 cycles
-;Should already be in the middle of the stop bit
-; We can ignore the actual stop bit and use the time for other things
-; Received byte in inb
-lda inb ; Put in A
-rts
-
-serial_tx:
-sta outb
-lda #$fd ; Inverse bit 1
-and DRA
-sta DRA ; Start bit
-lda #(8+13*BAUDSTEP) ; 2c ; 9600 = 8, 4800 = 21
-jsr delay_short ; 20 + (8-1)*8 = 76c ; Start bit total 104 cycles - 104 cycles measured
-nop ; 2c
-nop ; 2c
-ldx #8 ; 2c
-serial_tx_loop:
-lsr outb ; 5c
-lda DRA ; 3c
-bcc tx0 ; 2/3c
-ora #2 ; TX bit is bit 1 ; 2c
-bcs bitset ; BRA 3c
-tx0:
-nop ; 2c
-and #$fd ; 2c
-bitset:
-sta DRA ; 3c
-; Delay one period - overhead ; 101c total ; 103c measured
-lda #(8+13*BAUDSTEP) ; 2c ; 9600 8, 4800 21
-jsr delay_short ; 20 + (8-1)*8 = 76c
-nop; 2c fix
-dex ; 2c
-bne serial_tx_loop ; 3c
-nop; 2c ; Last bit 98us counted, 100us measured
-nop; 2c
-nop; 2c
-nop; 2c
-lda DRA ;3c
-ora #2 ; 2c
-sta DRA ; Stop bit 3c
-lda #(8+13*BAUDSTEP) ; 2c ; 9600 8, 4800 21
-jsr delay_short
-rts
-
-serial_wstring:
-ldy #0
-txstringloop:
-lda (stringp),y
-beq stringtxd
-jsr serial_tx
-iny
-bne txstringloop
-stringtxd:
-rts ; In case of overflow
-
-bytetoa: ;This SR puts LSB in A and MSB in HXH - as ascii using hextoa.
-pha
-lsr
-lsr
-lsr
-lsr
-clc
-jsr hextoa
-sta xtmp
-pla
-and #$0F
-jsr hextoa
-rts
-
-hextoa:
-; wozmon-style
-; and #%00001111  ; Mask LSD for hex print.
-; Already masked when we get here.
-ora #'0'        ; Add '0'.
-cmp #'9'+1      ; Is it a decimal digit?
-bcc ascr        ; Yes, output it.
-adc #$06        ; Add offset for letter.
-ascr:
 rts
 
 .segment "VECTORS6502"

@@ -1,3 +1,9 @@
+.import i2c_start, i2c_stop, i2cbyteout
+.importzp i2caddr, scroll, stringp, xtmp, tflags, cursor, outb
+
+.export ssd1306_init, ssd1306_clear, ssd1306_sendchar
+.export ssd1306_setcolumn, ssd1306_setline, printbyte, ssd1306_wstring, ssd1306_prints
+
 ssd1306_init:
   clc
   jsr i2c_start
@@ -277,7 +283,7 @@ rts
 ssd1306_cmd:
 pha ; Save command
 lda #$3c ; SSD1306 address
-sta I2CADDR
+sta i2caddr
 clc ;Write flag
 jsr i2c_start
 ;A is 0 == Co = 0, D/C# = 0
@@ -348,6 +354,31 @@ clc
 adc #1
 and #127
 sta cursor
+rts
+
+bytetoa: ;This SR puts LSB in A and MSB in HXH - as ascii using hextoa.
+pha
+lsr
+lsr
+lsr
+lsr
+clc
+jsr hextoa
+sta xtmp
+pla
+and #$0F
+jsr hextoa
+rts
+
+hextoa:
+; wozmon-style
+; and #%00001111  ; Mask LSD for hex print.
+; Already masked when we get here.
+ora #'0'        ; Add '0'.
+cmp #'9'+1      ; Is it a decimal digit?
+bcc ascr        ; Yes, output it.
+adc #$06        ; Add offset for letter.
+ascr:
 rts
 
 ssd1306_inittab:

@@ -1,6 +1,14 @@
 ; Written by Anders Nielsen, 2023-2024
 ; License: https://creativecommons.org/licenses/by-nc/4.0/legalcode
 
+.include "riot.s"
+
+.importzp i2caddr, inb, outb
+
+.export i2c_start, i2c_stop, i2cbyteout
+
+; constants
+
 SCL     = 1 ; DRB0 bitmask
 SCL_INV = $FE ; Inverted for easy clear bit
 SDA     = 2 ; DRB1 bitmask
@@ -9,7 +17,7 @@ SDA_INV = $FD
 ; i2c routines for the 65uino
 
 i2c_start:
-  lda I2CADDR
+  lda i2caddr
   rol ; Shift in carry
   sta outb ; Save addr + r/w bit
 
