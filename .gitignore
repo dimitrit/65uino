@@ -1,6 +1,7 @@
 *.o
 *.bin
 *.lst
+*.map
 .DS_Store
 hardware/_autosave*
 hardware/#auto_saved_files#
