@@ -1,13 +1,18 @@
 AS = ca65
 LD = ld65
 
-rom = abn6507rom.bin
-rom_objects = zerop.o i2c.o ssd1306.o serial.o abn6507rom.o
+LDCONFIG = memmap.cfg
 
-default: $(rom)
+default: full
 
-$(rom): $(rom_objects)
-	$(LD) -o $@ $(rom_objects) -C memmap.cfg -Ln $(basename $@).map
+full: abn6507rom.bin
+
+
+
+abn6507rom.bin: zerop.o i2c.o ssd1306.o serial.o abn6507rom.o
+
+%.bin: %.o
+	$(LD) -o $@ $^ -C $(LDCONFIG) -Ln $(basename $@).map
 
 %.o: %.s
 	$(AS) -vvv --cpu 6502 -l $(basename $<).lst -o $@ $<
